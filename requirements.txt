@@ -1,0 +1,3 @@
+aws-cdk-lib>=2.135.0,<2.136.0
+constructs>=10.0.0,<11.0.0
+cdk-monitoring-constructs>=7.8.0,<7.9.0

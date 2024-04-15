@@ -1,0 +1,11 @@
+*.swp
+package-lock.json
+__pycache__
+.pytest_cache
+.venv
+*.egg-info
+
+# CDK asset staging directory
+.cdk.staging
+cdk.out
+s3_caching_solution/lambda/boto3_lambda_layer/*
