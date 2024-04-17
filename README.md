@@ -80,7 +80,7 @@ You are executing the step function to move 1TB of data for a total of 3M object
 | :---------------- | :------: | ----: |
 | S3 Batch Job - Tasks | 0.25 |  $5.00 |
 | S3 Batch Job - Objects | 0.000001 |  $3.00 |
-| S3 List API - Standard | 0.000005 |  $15.00 |
+| S3 List API - Standard | 0.000000005 |  $0.02 |
 | S3 Get API - Standard | 0.0000004 |  $1.20 |
 | S3xz Put API | 0.0000025 |  $7.50 |
 | S3xz Data Put (+512kb) | 0.008 |  $0 |
@@ -88,7 +88,7 @@ You are executing the step function to move 1TB of data for a total of 3M object
 | Lambda execution | 0.0000002 |  $0 |
 | Lambda memory (Gb-Second) | 0.0000133334 |  $2.67 |
 | Step Function | 0.000025 |  $0.02|
-| | | $38.13 |
+| | | $23.16 |
 
 | Additional Costs | Cost (Virginia) | Total |
 | :---------------- | :------: | ----: |
@@ -101,7 +101,7 @@ You are executing the step function to move 3TB of data for a total of 330k obje
 | :---------------- | :------: | ----: |
 | S3 Batch Job - Tasks | 0.25 |  $2.50 |
 | S3 Batch Job - Objects | 0.000001 |  $0.33 |
-| S3 List API - Standard | 0.000005 |  $1.65 |
+| S3 List API - Standard | 0.000000005 |  $0.00 |
 | S3 Get API - Standard | 0.0000004 |  $0.13 |
 | S3xz Put API | 0.0000025 |  $0.83 |
 | S3xz Data Put (+512kb) | 0.008 |  $23.29 |
@@ -109,7 +109,7 @@ You are executing the step function to move 3TB of data for a total of 330k obje
 | Lambda execution | 0.0000002 |  $0.00 |
 | Lambda memory (Gb-Second) | 0.0000133334 |  $0.29 |
 | Step Function | 0.000025 |  $0.01 |
-| | | $29.44 |
+| | | $27.79 |
 
 | Additional Costs | Cost (Virginia) | Total |
 | :---------------- | :------: | ----: |
@@ -125,7 +125,7 @@ In total, this new request will cost:
 | :---------------- | :------: | ----: |
 | S3 Batch Job - Tasks | 0.25 |  $1.25 |
 | S3 Batch Job - Objects | 0.000001 |  $0.10 |
-| S3 List API - Standard | 0.000005 |  $2.15 |
+| S3 List API - Standard | 0.000000005 |  $0.00 |
 | S3 Get API - Standard | 0.0000004 |  $0.04 |
 | S3xz Put API | 0.0000025 |  $0.25 |
 | S3xz Data Put (+512kb) | 0.008 |  $3.71 |
@@ -133,7 +133,7 @@ In total, this new request will cost:
 | Lambda execution | 0.0000002 |  $0.00 |
 | Lambda memory (Gb-Second) | 0.0000133334 |  $0.30 |
 | Step Function | 0.000025 |  $0.01 |
-| | | $8.35 |
+| | | $6.20 |
 
 | Additional Costs | Cost (Virginia) | Total |
 | :---------------- | :------: | ----: |
