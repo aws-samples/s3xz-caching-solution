@@ -1,23 +1,27 @@
 import os, boto3, uuid
+from aws_lambda_powertools import Logger
+
+logger = Logger(log_uncaught_exceptions=True)
 
 working_bucket = os.environ['WORKING_BUCKET']
 s3_control = boto3.client('s3control')
 s3_client = boto3.client('s3')
 batch_role = os.environ['BATCH_ROLE']
 
+@logger.inject_lambda_context
 def lambda_handler(event, context):
+    logger.set_correlation_id(event['main_workflow'])
+    logger.debug(event)
 
     account_id = context.invoked_function_arn.split(":")[4]
     region = context.invoked_function_arn.split(":")[3]
     directory_bucket = event["directory_bucket"]
-    consolidation_threshold = int(os.environ['CONSOLIDATION_THRESHOLD'])
-    
+
     f = open('/tmp/manifest.csv', 'w')
     
     workflow_id = event['workflow'].split(':')[-1]
     bucket = event['bucket']
     
-    failed_jobs = []
     succeed_jobs = []
     object_count = 0
 
@@ -25,30 +29,26 @@ def lambda_handler(event, context):
         if map_result is not None:
 
             if 'succeed' in map_result:
-                data = s3_client.get_object(Bucket=working_bucket, Key=map_result['succeed'])
-                content = data['Body'].read().decode("utf-8")[1:-1].split(", ")
-                succeed_jobs.append(map_result['succeed'])
+                for obj_succeed in map_result['succeed']:
+                    data = s3_client.get_object(Bucket=working_bucket, Key=obj_succeed)
+                    content = data['Body'].read().decode("utf-8")[1:-1].split(", ")
+                    succeed_jobs.append(map_result['succeed'])
                 
-                for line in content:
-                    f.write(line[1:-1] + '\n')
-                    object_count += 1
-                
-            if 'failed' in map_result:
-                failed_jobs.append(map_result['failed'])
+                    for line in content:
+                        f.write(line[1:-1] + '\n')
+                        object_count += 1
 
     f.close()
 
     if object_count == 0:
 
-        print(f'No objects to copy. Skipping S3 Batch Job')
+        logger.info(f'No objects to copy. Skipping S3 Batch Job')
 
         result = {}
-        result['account_id'] = account_id
-        result['JobId'] = []
-        result['failed_jobs'] = failed_jobs
+        result['AccountId'] = account_id
         return result
     
-    elif object_count >= consolidation_threshold:
+    else:
 
         manifest_id = str(uuid.uuid4())
         upload = s3_client.put_object(Body=open('/tmp/manifest.csv','rb'), Bucket=working_bucket, Key=f'{bucket}/{workflow_id}/{manifest_id}.csv')
@@ -90,23 +90,8 @@ def lambda_handler(event, context):
             RoleArn=batch_role
         )
         
-        print(f'An S3 Batch Job has been executed with id {batch_job['JobId']}, to copy {object_count} objects')
+        logger.info(f'An S3 Batch Job has been executed with id {batch_job['JobId']}, to copy {object_count} objects')
 
-        result['account_id'] = account_id
-        result['JobId'] = [batch_job['JobId']]
-        result['failed_jobs'] = failed_jobs
-        return result
-        
-    else:
-
-        print(
-            f'''There are {object_count} objects to copy, but we skip the Batch to consolidate in next step and be more cost efficient. 
-            You can change this behavior by modifying the CONSOLIDATION_THRESHOLD environment variable for this Lambda Function, currently set at {consolidation_threshold} objects'''
-        )
-
-        result = {}
-        result['account_id'] = account_id
-        result['JobId'] = []
-        result['failed_jobs'] = failed_jobs
-        result['succeed'] = succeed_jobs
+        result['AccountId'] = account_id
+        result['JobId'] = batch_job['JobId']
         return result

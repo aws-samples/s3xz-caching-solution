@@ -1,6 +1,6 @@
 # S3 Express One Zone caching solution
 ## Introduction
-This solution implements a strategy for copying data from traditional S3 buckets to directory buckets in S3 Express One Zone. It uses caching logic so that copying data is as fast and cost-effective as possible if the objects are already in the directory bucket. Automatic deletion and expiration based on the object's TTL is included.
+This solution implements a strategy for copying data from general purpose S3 buckets to directory buckets in S3 Express One Zone. It uses caching logic so that copying data is as fast and cost-effective as possible, avoiding to reprocess objects that are already in the destination directory bucket. Automatic deletion and expiration based on the object's TTL is included.
 
 [From the launch blogpost: ](https://aws.amazon.com/blogs/aws/new-amazon-s3-express-one-zone-high-performance-storage-class/)
 
@@ -47,28 +47,44 @@ The `force_copy` parameter allows you to ignore cache presence and for the batch
 The `prefixes` parameter is a list of prefixes residing in the `bucket` defined. You can choose to define the parameter in the following ways:
 * Copy the whole bucket to the cache: `[ "" ]`
 * Using Top Level Prefixes: `[ "year-2023/", "year-2024/" ]`
-* Using deeper prefixes: `[ "year-2023/month-01/day-04", "year-2024/month-05/" ]`
+* Using deeper prefixes: `[ "year-2023/month-01/day-04/", "year-2024/month-05/" ]`
 
-By using deeper prefixes, you are parallelizing the job wider which will allow the step function to run faster. On the other hand, more prefixes will potentially mean more S3 Batch Job executions, charged at $0.25 per job. 
-To cost optimize the solution we implemented an aggregation logic, to only run S3 Batch Jobs per prefix, when the prefix is bigger than 10k objects (default value). For prefixes smaller than that, a single job will be created aggregating the copy requirement. You can change this behavior by changing the Environment Variable `CONSOLIDATION_THRESHOLD` in the [`prefix_batch_lambda` definition](s3_caching_solution/s3_caching_solution_stack.py)
-
+By using deeper prefixes, you are parallelizing the job wider which will allow the step function to run faster. On the other hand, more prefixes will mean more S3 Batch Job executions, charged at $0.25 per job.
 Source and Destination buckets needs to reside in the same AWS Region and same AWS Account along with the deployment of this solution.
 
 **Note:** DynamoDB Time to Live (TTL) functionality is used for object deletion from Directory Buckets upon expiration. DynamoDB TTL functionality operates on best-effort basis, therefore it can take time to delete entires from the DynamoDB caching database. This can affect the deletion time of cached objects DynamoDB supervises in S3 Express One Zone.
 
 If your source data is encrypted using KMS, you need to enable the corresponding permissions on the KMS Key and IAM Role (S3CachingSolutionStack-BatchRole###).
 
+### Cross SFN execution consistency
+Version 1.1 of the solution implements a cross Step Function execution consistency feature, designed to avoid race conditions when different teams or processes request the same data to be moved to the cache. This is done with locking and status tracking at the prefix level.
+With this feature t+1 Step Function executions requesting the same data are aware of other in-flight workflow executions. To achieve this, an additional DynamoDB table is used for state management and locking logic. Additional AWS Lambda functions are also added to the Step Function workflow to implement the locking logic.
+
+The logic checks all levels of prefixes, so for example if the prefix `[ “year-2023/” ]` is requested in the first execution, and then `[ “year-2023/month-02/” ]` in the second execution, all possible combinations are checked to validate if another workflow currently executing is working on data movement that includes the prefixes included in new request.
+
+The state management DynamoDB table also persists the result from the previous runs up until expiration time (relying on the `TTL` parameter) and consolidates based on previously executed `force_copy` requests (ignoring anything that happened before a `force_copy`). This allows the t+1 executions to discover if the previous job working on the same data had any failure that required further attention. The results from all relevant S3 Batch Job executions gets added and reported back in the result of the SFN execution.
+
+
 ## Performance Tuning
 Current configuration is design to accommodate most scenarios, but depending on your usage pattern (e.g. number of objects per prefix, number of prefixes, etc) you might need to fine tune it to your needs. All of this configurations should be applied to the [CDK Stack here](s3_caching_solution/s3_caching_solution_stack.py). 
 Some of the most common parameters are:
-* Lambda Memory allocation: we recommend using [AWS Compute Optimizer](https://aws.amazon.com/compute-optimizer/) for this. After running the Step Function a few times, you'll get a sizing recommendation based on your usage pattern. Because the variability of number of object per request, we recommend to have a buffer overhead for the Batch Lambda functions (PrefixBatchLambda and ConsolidationBatchLambda)
+* Lambda Memory allocation: we recommend using [AWS Compute Optimizer](https://aws.amazon.com/compute-optimizer/) for this. After running the Step Function a few times, you'll get a sizing recommendation based on your usage pattern. Because the variability of number of object per request, we recommend to have a small buffer overhead for the Lambda functions to accommodate bigger batches of objects.
+* Lambda Ephemeral Storage Size: The `prefix_batch` lambda function is responsible for building the manifest files for S3 Batch Jobs to consume. Depending the number of objects in your prefixes, the manifest file can be quite big. This Lambda will construct that file on it's local `/tmp/` directory, by default it's defined as 5GiB volume, but this can be modified according to the use case.
 * Step Functions Distributed MAP State concurrency: this is the total number of lambda functions you allow the solution to run per Branch. Default is 40, but depending on the number of prefixes you usually copy, you might want to adjust this number to process objects quicker or avoid hitting the maximum number of Lambda Concurrent Executions per account.
 * Batch Sizes: The bigger the batch, the longer the lambda takes to run. This allows you to control in conjunction with the Concurrency, how fast you'll be updating DynamoDB Items. We don't suggest to reduce this number by much, because of how the solution handles intermediate objects in S3 and limitations on the state transition input size.
+
+### Additional optimizations
+AWS Account Quotas apply, this is a massively parallel workflow so you can expect to hit some of the [default quotas mainly for Lambda Functions](https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-limits.html#compute-and-storage). If this is the case, you'll see error codes `429 (Too Many Requests)` errors on the Step Function executions and you can [request a service quota increase](https://aws.amazon.com/getting-started/hands-on/request-service-quota-increase/)
+
+Finally, DynamoDB is used as the state management engine for the cache with an on-demand provisioning mode. You might notice on the first few runs of the Step Functions that there are lots of throttling events, but the table will keep scaling it's upper bound write capacity units to meet your needs. The Step Function has it's own retry logic to accommodate this behavior, and as the table scales, you'll see less throttles and higher caching performance.
 
 ## Monitoring
 The Step Function will return the final result for the job as Successful or Failed, in which case it will individually report any S3 Batch Job partially or totally failed with information pointing you to the report.
 
 Additionally, we are creating two CloudWatch Dashboard and some alarms based on Lambda logging, ready to monitor metrics and errors for the whole solution. You can find the Dashboard in CloudWatch, and you'll need to subscribe to the SNS Topic created for the alarms (S3CachingSolutionStack-NotificationTopic###).
+
+[Lambda PowerTools](https://docs.powertools.aws.dev/lambda/python/2.40.1/) was also implemented to improve logging capabilities. By default every lambda function will be logging the same type of information, but we now enabled a debug mode that allows you to get more information, including the request context and event. To do so, you just need to modify the Lambda function Environment Variable `POWERTOOLS_LOG_LEVEL`. You can also change this through a new deployment by modifying the CDK project configuration parameters. Debug mode is very includes Lambda Events that can be very verbose, so use with caution.
+Additionally, all the Lambda executions withing a Step Function uses the SFN Execution ID as a Correlation ID so you can easily filter single runs in the logs.
 
 ## Solution Costs
 The solution is fully serverless, meaning that you only pay for what you use. I'll present a few costs scenarios to consider:
@@ -144,7 +160,7 @@ In total, this new request will cost:
 This project is built using Python3 and CDK, before you start, make sure to have all the pre requirements properly installed in your environment.
 
 * AWS CLI https://aws.amazon.com/cli/ 
-* AWS CDK 2.135.0+ https://docs.aws.amazon.com/cdk/latest/guide/getting_started.html#getting_started_install
+* AWS CDK 2.147.0+ https://docs.aws.amazon.com/cdk/latest/guide/getting_started.html#getting_started_install
 * Python 3.9+
 
 ## Deployment
