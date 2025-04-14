@@ -88,8 +88,9 @@ Additionally, all the Lambda executions withing a Step Function uses the SFN Exe
 
 ## Solution Costs
 The solution is fully serverless, meaning that you only pay for what you use. I'll present a few costs scenarios to consider:
+* Scenarios updated after [Amazon S3 Express One Zone reduces storage and request prices](https://aws.amazon.com/about-aws/whats-new/2025/04/amazon-s3-express-one-zone-reduces-storage-request-prices/) announcement.
 
-#### Scenario 1 - Copying millions of small <512k objects :
+#### Scenario 1 - Copying millions of small objects:
 You are executing the step function to move 1TB of data for a total of 3M object with an avg. object size of 0.35MB. The objects will be distributed among 20 prefixes and cache will be retained for 24 hours:
 
 | Pricing Category | Cost (N. Virginia) | Total |
@@ -98,17 +99,17 @@ You are executing the step function to move 1TB of data for a total of 3M object
 | S3 Batch Job - Objects | 0.000001 |  $3.00 |
 | S3 List API - Standard | 0.000000005 |  $0.02 |
 | S3 Get API - Standard | 0.0000004 |  $1.20 |
-| S3xz Put API | 0.0000025 |  $7.50 |
-| S3xz Data Put (+512kb) | 0.008 |  $0 |
+| S3xz Put API | 0.00000113 |  $3.39 |
+| S3xz Data Put | 0.0032 |  $3.28 |
 | DynamoDB write | 0.00000125 |  $3.75 |
 | Lambda execution | 0.0000002 |  $0 |
 | Lambda memory (Gb-Second) | 0.0000133334 |  $2.67 |
 | Step Function | 0.000025 |  $0.02|
-| | | $23.16 |
+| | | $22.33 |
 
 | Additional Costs | Cost (Virginia) | Total |
 | :---------------- | :------: | ----: |
-| S3xz Data Storage | 0.16 | $5.39 |
+| S3xz Data Storage | 0.11 | $3.71 |
 
 #### Scenario 2 - Copying 100s of thousands of medium size objects:
 You are executing the step function to move 3TB of data for a total of 330k object with an avg. object size of 9.53MB. The objects will be distributed among 10 prefixes and cache will be retained for 12 hours:
@@ -119,17 +120,17 @@ You are executing the step function to move 3TB of data for a total of 330k obje
 | S3 Batch Job - Objects | 0.000001 |  $0.33 |
 | S3 List API - Standard | 0.000000005 |  $0.00 |
 | S3 Get API - Standard | 0.0000004 |  $0.13 |
-| S3xz Put API | 0.0000025 |  $0.83 |
-| S3xz Data Put (+512kb) | 0.008 |  $23.29 |
+| S3xz Put API | 0.00000113 |  $0.37 |
+| S3xz Data Put | 0.0032 |  $9.83 |
 | DynamoDB write | 0.00000125 |  $0.41 |
 | Lambda execution | 0.0000002 |  $0.00 |
 | Lambda memory (Gb-Second) | 0.0000133334 |  $0.29 |
 | Step Function | 0.000025 |  $0.01 |
-| | | $27.79 |
+| | | $13.87 |
 
 | Additional Costs | Cost (Virginia) | Total |
 | :---------------- | :------: | ----: |
-| S3xz Data Storage | 0.16 | $8.08 |
+| S3xz Data Storage | 0.11 | $5.55 |
 
 #### Scenario 3 - Leveraging the cache logic based on Scenario 2:
 You are executing the step function again for a new job, but on this one there is an overlap of requirements with Scenario 2 and the TLL is still not expired.
@@ -143,17 +144,17 @@ In total, this new request will cost:
 | S3 Batch Job - Objects | 0.000001 |  $0.10 |
 | S3 List API - Standard | 0.000000005 |  $0.00 |
 | S3 Get API - Standard | 0.0000004 |  $0.04 |
-| S3xz Put API | 0.0000025 |  $0.25 |
-| S3xz Data Put (+512kb) | 0.008 |  $3.71 |
+| S3xz Put API | 0.00000113 |  $0.11 |
+| S3xz Data Put | 0.0032 |  $1.64 |
 | DynamoDB write | 0.00000125 |  $0.54 |
 | Lambda execution | 0.0000002 |  $0.00 |
 | Lambda memory (Gb-Second) | 0.0000133334 |  $0.30 |
 | Step Function | 0.000025 |  $0.01 |
-| | | $6.20 |
+| | | $3.99 |
 
 | Additional Costs | Cost (Virginia) | Total |
 | :---------------- | :------: | ----: |
-| S3xz Data Storage | 0.16 | $9.43 |
+| S3xz Data Storage | 0.11 | $6.48 |
 
 ## Pre requirements
 
